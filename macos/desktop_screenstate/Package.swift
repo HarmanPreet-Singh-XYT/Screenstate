@@ -6,7 +6,7 @@ import PackageDescription
 let package = Package(
     name: "desktop_screenstate",
     platforms: [
-        .macOS("12.0")
+        .macOS("10.14")
     ],
     products: [
         .library(name: "desktop-screenstate", targets: ["desktop_screenstate"])

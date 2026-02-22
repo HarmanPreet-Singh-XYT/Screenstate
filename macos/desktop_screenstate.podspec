@@ -17,7 +17,7 @@ A new Flutter plugin project.
   s.source_files     = 'desktop_screenstate/Sources/desktop_screenstate/**/*.swift'
   s.dependency 'FlutterMacOS'
 
-  s.platform = :osx, '12.0'
+  s.platform = :osx, '10.14'
   s.pod_target_xcconfig = { 'DEFINES_MODULE' => 'YES' }
   s.swift_version = '5.0'
   s.resource_bundles = {'desktop_screenstate_privacy' => ['desktop_screenstate/Sources/desktop_screenstate/PrivacyInfo.xcprivacy']}
