@@ -29,3 +29,7 @@ migrate_working_dir/
 .dart_tool/
 .packages
 build/
+
+# Rust build artifacts
+windows/rust/target/
+windows/rust/Cargo.lock

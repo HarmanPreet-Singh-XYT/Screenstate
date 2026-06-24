@@ -3,8 +3,6 @@
 
 #include <flutter/dart_project.h>
 #include <flutter/flutter_view_controller.h>
-#include <winuser.h>
-#include <powrprof.h>
 #include <memory>
 
 #include "win32_window.h"
@@ -22,13 +20,6 @@ class FlutterWindow : public Win32Window {
 
  private:
   flutter::DartProject project_;
-
-  // For GUID_CONSOLE_DISPLAY_STATE (screen on/off)
-  HPOWERNOTIFY power_notification_handle_ = nullptr;
-
-  // For true system sleep/resume via callback (bypasses message queue)
-  HPOWERNOTIFY suspend_resume_handle_ = nullptr;
-
   std::unique_ptr<flutter::FlutterViewController> flutter_controller_;
 };
 

@@ -2,23 +2,47 @@ cmake_minimum_required(VERSION 3.14)
 set(PROJECT_NAME "desktop_screenstate")
 project(${PROJECT_NAME} LANGUAGES CXX)
 
-# This value is used when generating builds using this plugin, so it must
-# not be changed
-set(PLUGIN_NAME "desktop_screenstate_plugin")
+# ── Verify cargo is available ─────────────────────────────────────────────────
+find_program(CARGO_EXE cargo REQUIRED)
+if(NOT CARGO_EXE)
+  message(FATAL_ERROR
+    "cargo not found. Install Rust from https://rustup.rs/ and ensure "
+    "cargo is on PATH before building this plugin.")
+endif()
 
-add_library(${PLUGIN_NAME} SHARED
-  "desktop_screenstate_plugin.cpp"
+# ── Rust build ────────────────────────────────────────────────────────────────
+set(RUST_SOURCE_DIR "${CMAKE_CURRENT_SOURCE_DIR}/rust")
+set(RUST_TARGET_DIR "${CMAKE_CURRENT_BINARY_DIR}/rust_build")
+
+if(CMAKE_BUILD_TYPE STREQUAL "Debug")
+  set(CARGO_PROFILE "debug")
+  set(CARGO_PROFILE_FLAG "")
+else()
+  set(CARGO_PROFILE "release")
+  set(CARGO_PROFILE_FLAG "--release")
+endif()
+
+set(RUST_DLL "${RUST_TARGET_DIR}/${CARGO_PROFILE}/desktop_screenstate_rs.dll")
+
+add_custom_command(
+  OUTPUT "${RUST_DLL}"
+  COMMAND "${CARGO_EXE}" build
+          ${CARGO_PROFILE_FLAG}
+          --manifest-path "${RUST_SOURCE_DIR}/Cargo.toml"
+          --target-dir "${RUST_TARGET_DIR}"
+  DEPENDS
+    "${RUST_SOURCE_DIR}/src/lib.rs"
+    "${RUST_SOURCE_DIR}/Cargo.toml"
+  COMMENT "Building Rust screenstate DLL (${CARGO_PROFILE})"
+  VERBATIM
 )
-apply_standard_settings(${PLUGIN_NAME})
-set_target_properties(${PLUGIN_NAME} PROPERTIES
-  CXX_VISIBILITY_PRESET hidden)
-target_compile_definitions(${PLUGIN_NAME} PRIVATE FLUTTER_PLUGIN_IMPL)
-target_include_directories(${PLUGIN_NAME} INTERFACE
-  "${CMAKE_CURRENT_SOURCE_DIR}/include")
-target_link_libraries(${PLUGIN_NAME} PRIVATE flutter flutter_wrapper_plugin)
 
-# List of absolute paths to libraries that should be bundled with the plugin
-set(desktop_lifecycle_bundled_libraries
-  ""
+add_custom_target(desktop_screenstate_rs ALL DEPENDS "${RUST_DLL}")
+
+# ── Install the DLL next to the Flutter executable ────────────────────────────
+# Flutter's FFI plugin mechanism copies files listed in the bundled_libraries
+# variable into the application's output directory.
+set(desktop_screenstate_bundled_libraries
+  "${RUST_DLL}"
   PARENT_SCOPE
 )

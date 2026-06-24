@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:convert';
+import 'dart:ffi';
 import 'dart:io';
 
 import 'package:flutter/foundation.dart';
@@ -9,6 +10,29 @@ enum ScreenState { sleep, awaked, locked, unlocked, screenOff, screenOn }
 
 /// Which screen state monitor to use on Linux
 enum ScreenStateMonitor { dbus, gdbus }
+
+// ── Windows FFI bindings ──────────────────────────────────────────────────────
+
+typedef _StartNative = Void Function(Pointer<NativeFunction<Void Function(Pointer<Uint8>)>>);
+typedef _StartDart = void Function(Pointer<NativeFunction<Void Function(Pointer<Uint8>)>>);
+typedef _StopNative = Void Function();
+typedef _StopDart = void Function();
+
+DynamicLibrary? _lib;
+_StartDart? _nativeStart;
+_StopDart? _nativeStop;
+
+void _initWindowsFfi() {
+  _lib = DynamicLibrary.open('desktop_screenstate_rs.dll');
+  _nativeStart = _lib!
+      .lookup<NativeFunction<_StartNative>>('screenstate_start')
+      .asFunction();
+  _nativeStop = _lib!
+      .lookup<NativeFunction<_StopNative>>('screenstate_stop')
+      .asFunction();
+}
+
+// ── Main class ────────────────────────────────────────────────────────────────
 
 class DesktopScreenState {
   static const _channel = MethodChannel('screenstate');
@@ -20,6 +44,9 @@ class DesktopScreenState {
   static int _dbusPid = 0;
   static int _gdbusPid = 0;
 
+  // Keeps the NativeCallable alive for the plugin lifetime.
+  static NativeCallable<Void Function(Pointer<Uint8>)>? _windowsCallable;
+
   /// Singleton instance of DesktopScreenState
   static DesktopScreenState? _instance;
   static DesktopScreenState get instance => _instance ??= _createInstance();
@@ -27,7 +54,13 @@ class DesktopScreenState {
   static DesktopScreenState _createInstance() {
     final instance = DesktopScreenState._();
 
-    if (Platform.isWindows || Platform.isMacOS) {
+    if (Platform.isWindows) {
+      _initWindowsFfi();
+      _windowsCallable = NativeCallable<Void Function(Pointer<Uint8>)>.listener(
+        _onWindowsEvent,
+      );
+      _nativeStart!(_windowsCallable!.nativeFunction);
+    } else if (Platform.isMacOS) {
       _channel.setMethodCallHandler(instance._handleMethodCall);
     } else if (Platform.isLinux) {
       switch (linuxMonitor) {
@@ -43,8 +76,31 @@ class DesktopScreenState {
     return instance;
   }
 
+  static void _onWindowsEvent(Pointer<Uint8> ptr) {
+    // Rust passes a null-terminated UTF-8 string.
+    // Read bytes until the null terminator.
+    final bytes = <int>[];
+    var i = 0;
+    while (true) {
+      final b = ptr.elementAt(i).value;
+      if (b == 0) break;
+      bytes.add(b);
+      i++;
+    }
+    final event = String.fromCharCodes(bytes);
+    _activeState.value = ScreenState.values.firstWhere(
+      (e) => e.name == event,
+      orElse: () => ScreenState.awaked,
+    );
+  }
+
   static void dispose() {
     _disposing = true;
+    if (Platform.isWindows) {
+      _nativeStop?.call();
+      _windowsCallable?.close();
+      _windowsCallable = null;
+    }
     _stopDbusLinuxMonitor();
     _stopGdbusLinuxMonitor();
   }
@@ -138,21 +194,19 @@ class DesktopScreenState {
 
   ValueListenable<ScreenState> get isActive => _activeState;
 
+  ScreenState get state => _activeState.value;
+
   Future<dynamic> _handleMethodCall(MethodCall call) async {
     switch (call.method) {
       case "onScreenStateChange":
-        _onApplicationFocusChange(call.arguments as String);
+        _activeState.value = ScreenState.values.firstWhere(
+          (e) => e.name == (call.arguments as String),
+          orElse: () => ScreenState.awaked,
+        );
         break;
       default:
         break;
     }
-  }
-
-  void _onApplicationFocusChange(String active) {
-    _activeState.value = ScreenState.values.firstWhere(
-      (e) => e.toString().split('.').last == active,
-      orElse: () => ScreenState.awaked,
-    );
   }
 }
 
