@@ -22,18 +22,39 @@ else()
   set(CARGO_PROFILE_FLAG "--release")
 endif()
 
-set(RUST_DLL "${RUST_TARGET_DIR}/${CARGO_PROFILE}/desktop_screenstate_rs.dll")
+# Cargo defaults to the host triple. On Windows-on-Arm machines that is
+# aarch64-pc-windows-msvc even when Flutter is building the x64 variant of the
+# app (Flutter falls back to windows-x64 unless arm64 is explicitly
+# configured), which produces a DLL whose architecture doesn't match the
+# runner exe. Pin the Rust target to the architecture CMake is actually
+# building so they always match.
+if(CMAKE_VS_PLATFORM_NAME)
+  set(SCREENSTATE_TARGET_ARCH "${CMAKE_VS_PLATFORM_NAME}")
+elseif(CMAKE_GENERATOR_PLATFORM)
+  set(SCREENSTATE_TARGET_ARCH "${CMAKE_GENERATOR_PLATFORM}")
+else()
+  set(SCREENSTATE_TARGET_ARCH "x64")
+endif()
+
+if(SCREENSTATE_TARGET_ARCH STREQUAL "ARM64")
+  set(RUST_TARGET_TRIPLE "aarch64-pc-windows-msvc")
+else()
+  set(RUST_TARGET_TRIPLE "x86_64-pc-windows-msvc")
+endif()
+
+set(RUST_DLL "${RUST_TARGET_DIR}/${RUST_TARGET_TRIPLE}/${CARGO_PROFILE}/desktop_screenstate_rs.dll")
 
 add_custom_command(
   OUTPUT "${RUST_DLL}"
   COMMAND "${CARGO_EXE}" build
           ${CARGO_PROFILE_FLAG}
+          --target "${RUST_TARGET_TRIPLE}"
           --manifest-path "${RUST_SOURCE_DIR}/Cargo.toml"
           --target-dir "${RUST_TARGET_DIR}"
   DEPENDS
     "${RUST_SOURCE_DIR}/src/lib.rs"
     "${RUST_SOURCE_DIR}/Cargo.toml"
-  COMMENT "Building Rust screenstate DLL (${CARGO_PROFILE})"
+  COMMENT "Building Rust screenstate DLL (${RUST_TARGET_TRIPLE}, ${CARGO_PROFILE})"
   VERBATIM
 )
 
