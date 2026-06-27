@@ -23,13 +23,17 @@ _StartDart? _nativeStart;
 _StopDart? _nativeStop;
 
 void _initWindowsFfi() {
-  _lib = DynamicLibrary.open('desktop_screenstate_rs.dll');
-  _nativeStart = _lib!
-      .lookup<NativeFunction<_StartNative>>('screenstate_start')
-      .asFunction();
-  _nativeStop = _lib!
-      .lookup<NativeFunction<_StopNative>>('screenstate_stop')
-      .asFunction();
+  try {
+    _lib = DynamicLibrary.open('desktop_screenstate_rs.dll');
+    _nativeStart = _lib!
+        .lookup<NativeFunction<_StartNative>>('screenstate_start')
+        .asFunction();
+    _nativeStop = _lib!
+        .lookup<NativeFunction<_StopNative>>('screenstate_stop')
+        .asFunction();
+  } catch (e) {
+    debugPrint('Failed to load screenstate native library: $e');
+  }
 }
 
 // ── Main class ────────────────────────────────────────────────────────────────
@@ -56,10 +60,12 @@ class DesktopScreenState {
 
     if (Platform.isWindows) {
       _initWindowsFfi();
-      _windowsCallable = NativeCallable<Void Function(Pointer<Uint8>)>.listener(
-        _onWindowsEvent,
-      );
-      _nativeStart!(_windowsCallable!.nativeFunction);
+      if (_nativeStart != null) {
+        _windowsCallable = NativeCallable<Void Function(Pointer<Uint8>)>.listener(
+          _onWindowsEvent,
+        );
+        _nativeStart!(_windowsCallable!.nativeFunction);
+      }
     } else if (Platform.isMacOS) {
       _channel.setMethodCallHandler(instance._handleMethodCall);
     } else if (Platform.isLinux) {
